@@ -29,11 +29,11 @@
         <p>💡 右键点击任意句子可从该处开始朗读</p>
       </div>
       <div v-else-if="currentChapter" class="chapter-content">
-        <div v-for="(paragraph, pIdx) in currentChapterSentences" :key="pIdx">
+        <p v-for="(paragraph, pIdx) in currentChapterSentences" :key="pIdx" class="paragraph">
           <span v-for="(sentence, sIdx) in paragraph" :key="sIdx" :class="{ 'highlight-sentence': isCurrentSentence(pIdx, sIdx) }">
             {{ sentence.text }}
           </span>
-        </div>
+        </p>
       </div>
     </div>
 
@@ -512,5 +512,10 @@ export default {
       margin-bottom: 4px;
     }
   }
+}
+
+.paragraph {
+  text-indent: 2em;
+  margin-top: 12px;
 }
 </style>
