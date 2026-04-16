@@ -35,14 +35,14 @@ const mutations = {
 const actions = {
   loadBooksFromIndexDb ({ commit }) {
     return loadBooksFromIndexDb().then(books => {
-      console.log('从 IndexedDB 加载书籍:', books)
+      console.log('从 IndexedDB 加载书籍:', books, JSON.parse(JSON.stringify(books.map(b => b.readingAloudProgress))))
       commit('SET_BOOKS', books)
       commit('SET_BOOK_IS_LOAD', true)
       return books
     })
   },
   addBook ({ commit }, book) {
-    return openDatabase().then(db => {
+    return openDatabase('ebookShelf').then(db => {
       const tx = db.transaction('books', 'readwrite')
       const store = tx.objectStore('books')
       const request = store.add(book)
@@ -59,7 +59,7 @@ const actions = {
   },
 
   deleteBooks ({ commit, state }, bookIds) {
-    return openDatabase().then(db => {
+    return openDatabase('ebookShelf').then(db => {
       const tx = db.transaction('books', 'readwrite')
       const store = tx.objectStore('books')
       const deletePromises = bookIds.map(id => {
@@ -84,7 +84,7 @@ const actions = {
     const book = state.books.find(b => b.id === bookId)
     if (book) {
       book.readingAloudProgress = progress
-      return openDatabase().then(db => {
+      return openDatabase('ebookShelf').then(db => {
         const tx = db.transaction('books', 'readwrite')
         const store = tx.objectStore('books')
         const request = store.put(book)

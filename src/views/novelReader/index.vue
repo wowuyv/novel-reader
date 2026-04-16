@@ -12,7 +12,7 @@
       </el-button-group>
 
       <el-button-group>
-        <el-button :type="isPlaying ? 'warning' : 'primary'" :icon="isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'" @click="togglePlayPause" :disabled="!currentChapterSentences.length">朗读</el-button>
+        <el-button :type="isPlaying ? 'warning' : 'primary'" :icon="isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'" @click="togglePlayPause" :disabled="!currentChapterParagraphs.length">朗读</el-button>
         <el-button icon="el-icon-video-stop" @click="stopReading" :disabled="!isPlaying && !paused">停止</el-button>
       </el-button-group>
 
@@ -29,9 +29,9 @@
         <p>💡 右键点击任意句子可从该处开始朗读</p>
       </div>
       <div v-else-if="currentChapter" class="chapter-content">
-        <p v-for="(paragraph, pIdx) in currentChapterSentences" :key="pIdx" class="paragraph">
-          <span v-for="(sentence, sIdx) in paragraph" :key="sIdx" :class="{ 'highlight-sentence': isCurrentSentence(pIdx, sIdx) }">
-            {{ sentence.text }}
+        <p v-for="(paragraph, pIdx) in currentChapterParagraphs" :key="pIdx" class="paragraph">
+          <span v-for="(sentence, sIdx) in paragraph.sentences" :key="sIdx" :class="{ 'highlight-sentence': isCurrentSentence(pIdx, sIdx) }">
+            {{ sentence }}
           </span>
         </p>
       </div>
@@ -49,8 +49,8 @@
 
     <!-- 朗读进度指示器 -->
     <div class="speech-progress" v-if="isPlaying || paused">
-      <span>{{ readingAloudProgress.paragraphIndex + 1 }} / {{ currentChapterSentences.length }}</span>
-      <el-progress :percentage="Math.round(((readingAloudProgress.paragraphIndex + 1) / currentChapterSentences.length) * 100)" :stroke-width="6"></el-progress>
+      <span>{{ readingAloudProgress.paragraphIndex + 1 }} / {{ currentChapterParagraphs.length }}</span>
+      <el-progress :percentage="Math.round(((readingAloudProgress.paragraphIndex + 1) / currentChapterParagraphs.length) * 100)" :stroke-width="6"></el-progress>
     </div>
     <ReaderSettings :visible.sync="settingsVisible" @update="handleUpdateSettings" />
   </div>
@@ -58,8 +58,9 @@
 
 <script>
 import store from '@/store'
-import { EdgeTTS } from 'edge-tts-universal'
+// import { EdgeTTS } from 'edge-tts-universal'
 import { parseChapters, splitIntoSentences } from '@/utils/book.js'
+import { ReadAloud } from '@/utils/readAloud.js'
 
 import ReaderSettings from './components/settings.vue'
 
@@ -98,7 +99,9 @@ export default {
         paddingPercent: 10,
         speechRate: 0.9,
         selectedVoiceName: ''
-      }
+      },
+      /** @type {ReadAloud} */
+      readAloud: null
     }
   },
   computed: {
@@ -108,16 +111,16 @@ export default {
     currentChapter () {
       return this.chapters[this.currentChapterIndex] || null
     },
-    currentChapterSentences () {
+    /** 当前章节的段落数组 */
+    currentChapterParagraphs () {
       return this.currentChapter ? splitIntoSentences(this.currentChapter.content) : []
     },
     currentParagraph () {
-      return this.currentChapterSentences[this.readingAloudProgress.paragraphIndex] || []
+      return this.currentChapterParagraphs[this.readingAloudProgress.paragraphIndex] || null
     },
     currentSentenceText () {
-      return this.currentParagraph[this.readingAloudProgress.sentenceIndex]
-        ? this.currentParagraph[this.readingAloudProgress.sentenceIndex].text.substring(0, 50) + (this.currentParagraph[this.readingAloudProgress.sentenceIndex].text.length > 50 ? '…' : '')
-        : ''
+      const sentence = this.currentParagraph ? this.currentParagraph.sentences[this.readingAloudProgress.sentenceIndex] : null
+      return sentence ? sentence.substring(0, 50) + (sentence.length > 50 ? '…' : '') : ''
     },
     readingAreaStyle () {
       return {
@@ -141,7 +144,6 @@ export default {
         this.$nextTick(() => {
           this.scrollToCurrentSentence()
         })
-        this.saveBookProgress()
       }
     }
   },
@@ -179,8 +181,9 @@ export default {
         return
       }
       this.fileHandle = this.currentBook.handle
-      this.currentChapterIndex = this.currentBook.readingAloudProgress.chapterIndex
       this.readingAloudProgress.paragraphIndex = this.currentBook.readingAloudProgress.paragraphIndex
+      this.currentChapterIndex = this.currentBook.readingAloudProgress.chapterIndex
+      console.log('this.readingAloudProgress.paragraphIndex', this.readingAloudProgress.paragraphIndex)
 
       const permission = await this.fileHandle.queryPermission({ mode: 'read' })
       if (permission === 'granted') {
@@ -300,6 +303,7 @@ export default {
         paragraphIndex: 0,
         sentenceIndex: 0
       }
+      this.saveBookProgress(this.readingAloudProgress.paragraphIndex)
       this.showCatalog = false
       this.scrollToTop()
     },
@@ -312,36 +316,26 @@ export default {
     },
 
     async startReading () {
-      const real = this.currentParagraph.reduce((acc, s) => {
-        if (!s.isParagraphBreak && !s.isEmpty) {
-          acc += s.text
-        }
-        return acc
-      }, '')
-      if (!real.length) {
-        this.$message.warning('当前章节没有可朗读的句子')
+      if (this.currentParagraph.isEmpty) {
+        this.toNextParagraph()
         return
       }
-
-      const tts = new EdgeTTS(real, this.settingsData.selectedVoiceName)
-      console.log('tts', tts)
-      const result = await tts.synthesize()
-      console.log('this.currentParagraph', this.currentParagraph)
-      console.log('result', result)
-
-      const sentenceDuration = this.parseSentenceDuration(this.currentParagraph, result.subtitle)
-      console.log('sentenceDuration', sentenceDuration)
-      const audio = new Audio(URL.createObjectURL(result.audio))
-
-      await new Promise((resolve) => {
-        audio.addEventListener('loadedmetadata', resolve, { once: true })
-      })
+      if (!this.readAloud) {
+        this.readAloud = new ReadAloud(this.chapters, this.settingsData.selectedVoiceName)
+        window.readAloud = this.readAloud
+      }
+      const result = await this.readAloud.getAudio(this.currentChapterParagraphs, this.currentChapterIndex, this.readingAloudProgress.paragraphIndex)
+      if (!result) {
+        this.toNextParagraph()
+        return
+      }
+      const audio = result.audioElement
       this.currentAudio = audio
       this.isPlaying = true
       this.paused = false
 
+      const sentenceDuration = this.parseSentenceDuration(this.currentParagraph, result.subtitle)
       audio.addEventListener('timeupdate', () => {
-        console.log('timeupdate', audio.currentTime)
         const currentTime = audio.currentTime
         let index = this.readingAloudProgress.sentenceIndex
         for (let i = index; i < sentenceDuration.length; i++) {
@@ -350,7 +344,6 @@ export default {
             break
           }
         }
-        console.log('timeupdate', audio.currentTime, index)
         if (index !== this.readingAloudProgress.sentenceIndex) {
           this.readingAloudProgress.sentenceIndex = index
           this.scrollToCurrentSentence()
@@ -364,22 +357,16 @@ export default {
       })
 
       audio.addEventListener('ended', () => {
-        // this.stopReading()
+        audio.pause()
+        URL.revokeObjectURL(audio.src)
         audio.remove()
-        this.readingAloudProgress.paragraphIndex++
-        this.readingAloudProgress.sentenceIndex = 0
-        this.saveBookProgress(this.readingAloudProgress.paragraphIndex)
-        if (this.readingAloudProgress.paragraphIndex >= this.currentChapterSentences.length) {
-          this.finishChapter()
-        } else {
-          this.startReading()
-        }
+        this.toNextParagraph()
       })
 
       // audio.remove()
     },
     /**
-     * @param {Array<{text: String, isParagraphBreak: Boolean, isEmpty: Boolean}>} paragraph 当前段落的句子列表（包含分隔和空句）
+     * @param {import('@/utils/book.js').Paragraph} paragraph 当前段落的句子数组
      * @param {Array<{duration: Number, offset: Number, text: String}>} subtitles 当前段落的字幕信息（包含每个句子的文本和预估时长）
      * @returns {Array<Number>} 返回一个数组，表示段落中每个句子的结束时间（单位秒），空句和段落分隔使用前一个句子的时长
      */
@@ -387,16 +374,12 @@ export default {
       const result = []
       let subtitleIndex = 0
 
-      for (let i = 0; i < paragraph.length; i++) {
-        const sentence = paragraph[i]
-        if (sentence.isEmpty || sentence.isParagraphBreak) {
-          result.push(result[result.length - 1] || 0) // 空句和段落分隔使用前一个句子的时长
-          // 空句，直接跳过
-          continue
-        }
-
-        while (sentence.text.includes(subtitles[subtitleIndex].text) && subtitleIndex < subtitles.length - 1) {
+      for (let i = 0; i < paragraph.sentences.length; i++) {
+        const sentence = paragraph.sentences[i]
+        let sublen = 0
+        while (sentence.includes(subtitles[subtitleIndex].text) && subtitleIndex < subtitles.length - 1 && sublen < sentence.length) {
           subtitleIndex++
+          sublen += subtitles[subtitleIndex].text.length
         }
         const index = subtitleIndex - 1
         result.push(subtitles[index] ? (subtitles[index].duration + subtitles[index].offset) / 10000000 : 0)
@@ -417,6 +400,17 @@ export default {
 
     handleUpdateSettings (settings) {
       this.settingsData = settings
+    },
+
+    toNextParagraph () {
+      this.readingAloudProgress.paragraphIndex++
+      this.readingAloudProgress.sentenceIndex = 0
+      this.saveBookProgress(this.readingAloudProgress.paragraphIndex)
+      if (this.readingAloudProgress.paragraphIndex >= this.currentChapterParagraphs.length) {
+        this.finishChapter()
+      } else {
+        this.startReading()
+      }
     }
   }
 }

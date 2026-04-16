@@ -1,12 +1,30 @@
 
 const CHAPTER_REGEX = /^(第[零〇一二三四五六七八九十百千万\d]+[章回节]|楔子|引子|序章|尾声|番外|后记|前言|写在前面)/i
+/** 分割句子的标点的正则表达式 */
+const reg = /(?<=[。！？；：，])/g
 
 /**
+ * 章节
  * @typedef {Object} Chapter
  * @property {String} title - 章节标题
  * @property {String} content - 章节内容
  * @property {Number} startLine - 章节在原始文本中的起始行号
  * @property {Number} endLine - 章节在原始文本中的结束行号
+ */
+
+/**
+ * 句子
+ * @typedef {Object} Sentence
+ * @property {String} text - 句子文本
+ * @property {Boolean} isParagraphBreak - 是否为段落分隔符（空行）
+ * @property {Boolean} isEmpty - 句子是否仅包含符号无实际内容
+ */
+/**
+ * 段落
+ * @typedef {Object} Paragraph
+ * @property {String} text - 段落文本
+ * @property {Boolean} isEmpty - 段落是否仅包含符号无实际内容
+ * @property {String[]} sentences - 段落中的句子数组
  */
 
 /**
@@ -74,35 +92,18 @@ export function finalizeChapter (list, chapter) {
 }
 
 /**
- * 将文本分割成句子
- * @param {String} text - 要分割的文本
- * @return {Array<Array<{text: String, isParagraphBreak: Boolean, isEmpty: Boolean}>>} 分割后的句子数组，每个元素包含文本内容、是否为段落分隔符、是否为空内容
+ * 将章节文本分割成段落和句子
+ * @param {String} text - 要分割的章节文本
+ * @return {Paragraph[]} - 包含段落信息的数组，每个段落包含文本、是否为空以及句子数组
  */
 export function splitIntoSentences (text) {
-  const paragraphs = text.split(/\r?\n/)
-  const result = []
-  for (let i = 0; i < paragraphs.length; i++) {
-    const paragraph = []
-    const para = paragraphs[i]
-    if (para.trim().length === 0) {
-      // 空行：添加段落分隔标记
-      paragraph.push({ text: '', isParagraphBreak: true, isEmpty: true })
-      result.push(paragraph)
-      continue
+  return text.split(/\r?\n/).map(para => {
+    return {
+      text: para,
+      isEmpty: isEmptyContent(para),
+      sentences: para.split(reg)
     }
-    // 按标点分割句子（保留标点）
-    const reg = /(?<=[。！？；：，])/g
-    let parts = para.split(reg)
-    parts = parts.filter(p => p.trim().length > 0)
-    for (const part of parts) {
-      const isEmpty = isEmptyContent(part)
-      paragraph.push({ text: part.trim(), isParagraphBreak: false, isEmpty })
-    }
-    // 段落结束后添加一个换行标记（用于渲染时段落间空行）
-    // paragraph.push({ text: '', isParagraphBreak: true, isEmpty: true })
-    result.push(paragraph)
-  }
-  return result
+  })
 }
 
 /**
