@@ -98,6 +98,7 @@ export function finalizeChapter (list, chapter) {
  */
 export function splitIntoSentences (text) {
   return text.split(/\r?\n/).map(para => {
+    para = para.trim()
     return {
       text: para,
       isEmpty: isEmptyContent(para),

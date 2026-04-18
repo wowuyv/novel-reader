@@ -35,7 +35,6 @@ const mutations = {
 const actions = {
   loadBooksFromIndexDb ({ commit }) {
     return loadBooksFromIndexDb().then(books => {
-      console.log('从 IndexedDB 加载书籍:', books, JSON.parse(JSON.stringify(books.map(b => b.readingAloudProgress))))
       commit('SET_BOOKS', books)
       commit('SET_BOOK_IS_LOAD', true)
       return books

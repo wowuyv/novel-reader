@@ -1,5 +1,5 @@
-import { EdgeTTS } from 'edge-tts-universal'
 import { splitIntoSentences } from './book.js'
+import { EdgeTTSQueue } from './edge-tts-queue/edge-tts-queue.js'
 
 /**
  * @typedef {Object} SentenceInfo
@@ -28,6 +28,7 @@ export class ReadAloud {
     this.chapters = chapters
     this.voiceName = voiceName
     this.minDuration = minDuration
+    this.edgeTTSQueue = new EdgeTTSQueue(voiceName)
   }
 
   /**
@@ -38,7 +39,6 @@ export class ReadAloud {
    * @returns {Promise<AudioCache|null>}
    */
   async getAudio (currentChapterParagraphs, chapterIndex, paragraphIndex) {
-    console.log('getAudio', new Date().toLocaleString())
     const key = `${chapterIndex}_${paragraphIndex}`
     if (this.audioCaches.has(key)) {
       const audio = this.audioCaches.get(key)
@@ -69,17 +69,11 @@ export class ReadAloud {
     if (this.generatingAudio.has(key)) {
       return this.generatingAudio.get(key)
     }
-    console.log('开始生成音频', new Date().toLocaleString(), paragraph.text)
-    const tts = new EdgeTTS(paragraph.text, this.voiceName)
-    const promise = tts.synthesize().then((result) => {
+    const promise = this.edgeTTSQueue.synthesizeQueue(paragraph.text).then((result) => {
       const audioElement = new Audio(URL.createObjectURL(result.audio))
       return new Promise((resolve) => {
         audioElement.addEventListener('loadedmetadata', resolve, { once: true })
       }).then(() => {
-        console.log('生成完成', paragraph.text)
-        console.log('缓存时长1', Array.from(this.audioCaches.values()).reduce((pre, cur) => {
-          return pre + cur.audioElement.duration
-        }, 0) + audioElement.duration)
         return {
           ...result,
           audioElement
@@ -150,5 +144,15 @@ export class ReadAloud {
         this.audioCaches.delete(key)
       }
     }
+  }
+
+  close () {
+    for (const key of this.audioCaches.keys()) {
+      const audio = this.audioCaches.get(key).audioElement
+      audio.pause()
+      URL.revokeObjectURL(audio.src)
+      this.audioCaches.delete(key)
+    }
+    this.edgeTTSQueue.close()
   }
 }

@@ -7,6 +7,9 @@
       </el-button-group>
 
       <el-button-group>
+        <el-button @click="toBookshelf">
+          <img src="~@/assets/bookshelf.svg" alt="" style="width: 14px;">
+          书架</el-button>
         <el-button icon="el-icon-menu" @click="showCatalog = true">目录</el-button>
         <el-button icon="el-icon-setting" @click="settingsVisible = true">设置</el-button>
       </el-button-group>
@@ -16,7 +19,7 @@
         <el-button icon="el-icon-video-stop" @click="stopReading" :disabled="!isPlaying && !paused">停止</el-button>
       </el-button-group>
 
-      <div class="reading-status" v-if="currentSentenceText">
+      <div class="reading-status" v-if="isPlaying && currentSentenceText">
         📖 {{ currentSentenceText }}
       </div>
     </div>
@@ -50,7 +53,7 @@
     <!-- 朗读进度指示器 -->
     <div class="speech-progress" v-if="isPlaying || paused">
       <span>{{ readingAloudProgress.paragraphIndex + 1 }} / {{ currentChapterParagraphs.length }}</span>
-      <el-progress :percentage="Math.round(((readingAloudProgress.paragraphIndex + 1) / currentChapterParagraphs.length) * 100)" :stroke-width="6"></el-progress>
+      <el-progress text-color="#fff" :percentage="Math.round(((readingAloudProgress.paragraphIndex + 1) / currentChapterParagraphs.length) * 100)" :stroke-width="6"></el-progress>
     </div>
     <ReaderSettings :visible.sync="settingsVisible" @update="handleUpdateSettings" />
   </div>
@@ -58,7 +61,6 @@
 
 <script>
 import store from '@/store'
-// import { EdgeTTS } from 'edge-tts-universal'
 import { parseChapters, splitIntoSentences } from '@/utils/book.js'
 import { ReadAloud } from '@/utils/readAloud.js'
 
@@ -183,7 +185,6 @@ export default {
       this.fileHandle = this.currentBook.handle
       this.readingAloudProgress.paragraphIndex = this.currentBook.readingAloudProgress.paragraphIndex
       this.currentChapterIndex = this.currentBook.readingAloudProgress.chapterIndex
-      console.log('this.readingAloudProgress.paragraphIndex', this.readingAloudProgress.paragraphIndex)
 
       const permission = await this.fileHandle.queryPermission({ mode: 'read' })
       if (permission === 'granted') {
@@ -307,9 +308,6 @@ export default {
       this.showCatalog = false
       this.scrollToTop()
     },
-    onVoiceChange (value) {
-      console.log('已切换语音:', value)
-    },
 
     isCurrentSentence (pIdx, sIdx) {
       return this.isPlaying && this.readingAloudProgress.paragraphIndex === pIdx && this.readingAloudProgress.sentenceIndex === sIdx
@@ -322,7 +320,6 @@ export default {
       }
       if (!this.readAloud) {
         this.readAloud = new ReadAloud(this.chapters, this.settingsData.selectedVoiceName)
-        window.readAloud = this.readAloud
       }
       const result = await this.readAloud.getAudio(this.currentChapterParagraphs, this.currentChapterIndex, this.readingAloudProgress.paragraphIndex)
       if (!result) {
@@ -399,6 +396,10 @@ export default {
     },
 
     handleUpdateSettings (settings) {
+      if (this.readAloud && this.settingsData.selectedVoiceName !== settings.selectedVoiceName) {
+        this.readAloud.close()
+        this.readAloud = new ReadAloud(this.chapters, settings.selectedVoiceName)
+      }
       this.settingsData = settings
     },
 
@@ -411,6 +412,10 @@ export default {
       } else {
         this.startReading()
       }
+    },
+
+    toBookshelf () {
+      this.$router.push('/')
     }
   }
 }
