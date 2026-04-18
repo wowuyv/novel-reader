@@ -101,7 +101,7 @@ export default {
         bgColor: '#fef7e8',
         bgImageUrl: '',
         paddingPercent: 10,
-        speechRate: 0.9,
+        speechRate: 1,
         selectedVoiceName: ''
       },
       /** @type {ReadAloud} */
