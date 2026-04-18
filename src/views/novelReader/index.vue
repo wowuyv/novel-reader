@@ -404,6 +404,9 @@ export default {
         this.readAloud.close()
         this.readAloud = new ReadAloud(this.chapters, settings.selectedVoiceName)
       }
+      if (this.currentAudio) {
+        this.currentAudio.playbackRate = settings.speechRate
+      }
       this.settingsData = settings
     },
 

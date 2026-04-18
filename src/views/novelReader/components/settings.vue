@@ -23,6 +23,7 @@
         </el-form-item>
         <el-form-item label="背景图片">
           <el-input v-model="formModel.bgImageUrl" placeholder="输入图片URL（留空则使用纯色）"></el-input>
+          <el-button type="mini" @click="updateValue">确定</el-button>
           <div class="form-tip">支持网络图片地址</div>
         </el-form-item>
         <el-form-item label="左右空白(%)">
