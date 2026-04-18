@@ -186,7 +186,7 @@ export default {
         return
       }
       this.fileHandle = this.currentBook.handle
-      this.readingAloudProgress.paragraphIndex = this.currentBook.readingAloudProgress.paragraphIndex
+      this.readingAloudProgress.paragraphIndex = this.currentBook.readingAloudProgress.paragraphIndex || 0
       this.currentChapterIndex = this.currentBook.readingAloudProgress.chapterIndex
 
       const permission = await this.fileHandle.queryPermission({ mode: 'read' })

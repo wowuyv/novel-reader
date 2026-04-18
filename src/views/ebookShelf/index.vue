@@ -85,8 +85,8 @@ export default {
         id: Date.now(),
         name: extractDefaultNovelName(handle.name),
         readingAloudProgress: {
-          chapterIndex: 1,
-          sentenceIndex: 1
+          chapterIndex: 0,
+          sentenceIndex: 0
         },
         handle
       }
