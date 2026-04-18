@@ -65,6 +65,8 @@ import { parseChapters, splitIntoSentences } from '@/utils/book.js'
 import { ReadAloud } from '@/utils/readAloud.js'
 
 import ReaderSettings from './components/settings.vue'
+import jschardet from 'jschardet'
+import iconv from 'iconv-lite'
 
 export default {
   name: 'NovelReader',
@@ -176,6 +178,7 @@ export default {
   },
   beforeDestroy () {
     this.stopReading()
+    this.readAloud && this.readAloud.close()
   },
   methods: {
     async initBooks () {
@@ -217,7 +220,8 @@ export default {
     },
     async loadFile (file) {
       this.$message.info('正在加载文件...')
-      const text = await file.text()
+      // const text = await file.text()
+      const text = await this.getUtf8Text(file)
       this.chapters = parseChapters(text)
       this.$message.success(`加载成功，共 ${this.chapters.length} 章`)
       this.showCatalog = false
@@ -416,6 +420,46 @@ export default {
 
     toBookshelf () {
       this.$router.push('/')
+    },
+
+    async getUtf8Text (file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        // 关键：使用 readAsArrayBuffer 获取原始二进制数据[reference:5]
+        reader.onload = () => {
+          const arrayBuffer = reader.result
+          const uint8Array = new Uint8Array(arrayBuffer)
+
+          // 2. 关键步骤：将 Uint8Array 转换为 jschardet 所需的二进制字符串
+          let binaryString = ''
+          for (let i = 0; i < uint8Array.slice(0, 1024).length; i++) {
+            binaryString += String.fromCharCode(uint8Array[i])
+          }
+
+          // 3. 检测编码
+          // 传入二进制数据的前几KB即可高效检测，可提升性能
+          const detected = jschardet.detect(binaryString)
+          const originalEncoding = detected.encoding
+          console.log(`检测到的编码: ${originalEncoding}, 置信度: ${detected.confidence}`)
+
+          // 4. 如果已为 UTF-8 则直接使用，否则进行转码
+          let text = ''
+          // iconv-lite 解码需要 Buffer，但浏览器端通常有兼容处理，直接传入 Uint8Array 亦可
+          // 此处确保传入 iconv 支持的类型
+          if (originalEncoding && originalEncoding.toLowerCase() !== 'utf-8' && originalEncoding !== 'ascii') {
+          // 非 UTF-8 编码，使用 iconv-lite 转换为 UTF-8 字符串
+            text = iconv.decode(uint8Array, originalEncoding)
+          } else {
+            // 已是 UTF-8 或 ASCII，直接使用 TextDecoder 解码，性能更好
+            const decoder = new TextDecoder('utf-8')
+            text = decoder.decode(uint8Array)
+          }
+
+          resolve(text)
+        }
+        reader.onerror = (error) => reject(error)
+        reader.readAsArrayBuffer(file)
+      })
     }
   }
 }
