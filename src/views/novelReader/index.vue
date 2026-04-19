@@ -334,6 +334,7 @@ export default {
       this.currentAudio = audio
       this.isPlaying = true
       this.paused = false
+      this.currentAudio.playbackRate = this.settingsData.speechRate
 
       const sentenceDuration = this.parseSentenceDuration(this.currentParagraph, result.subtitle)
       audio.addEventListener('timeupdate', () => {
